@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Cirrocumulus Cloud - Prometheus and Grafana SaaS</title>
+    <link rel="stylesheet" href="https://cdn.bootcss.com/element-ui/2.9.2/theme-chalk/index.css">
+</head>
+<body>
+<div id="app" v-loading="loading">
+
+    <h1>Cirrocumulus Cloud - Prometheus and Grafana SaaS</h1>
+
+    <h2>Host Status</h2>
+    <el-table :data="clusterData" style="width: 100%">
+        <el-table-column prop="node" label="Node"></el-table-column>
+        <el-table-column prop="cpu" label="CPU(Used%/cores)"></el-table-column>
+        <el-table-column prop="load" label="Load Average"></el-table-column>
+        <el-table-column prop="disk" label="Disk(Used/Total/Used%)"></el-table-column>
+        <el-table-column prop="mem" label="Memory(Used/Total/Used%)"></el-table-column>
+        <el-table-column prop="swap" label="SWAP(Used/Total/Used%)"></el-table-column>
+    </el-table>
+
+    <h2>Create Instance</h2>
+    <el-form :inline="true" :model="formCreateInstance">
+        <el-form-item label="Instance Name">
+            <el-input v-model="formCreateInstance.name" placeholder="Instance Name"></el-input>
+        </el-form-item>
+        <el-form-item label="SaaS">
+            <el-select v-model="formCreateInstance.saas" placeholder="SaaS">
+                <el-option label="Prometheus + Grafana" value="pro_gra"></el-option>
+            </el-select>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="primary" @click="createInstance">Create</el-button>
+        </el-form-item>
+    </el-form>
+
+    <h2>Instance List</h2>
+    <el-table :data="instanceData" style="width: 100%">
+        <el-table-column prop="name" label="Instance Name"></el-table-column>
+        <el-table-column prop="state" label="Status"></el-table-column>
+        <el-table-column prop="ipv4" label="IPv4"></el-table-column>
+        <el-table-column prop="location" label="Host"></el-table-column>
+    </el-table>
+
+    <h2>Manage Instance</h2>
+    <el-form :inline="true" :model="formManageInstance">
+        <el-form-item label="Instance Name">
+            <el-input v-model="formManageInstance.name" placeholder="Instance Name"></el-input>
+        </el-form-item>
+        <el-form-item label="IPv4 address">
+            <el-input v-model="formManageInstance.ipv4" placeholder="IPv4 address"></el-input>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="success" @click="optInstance('start')">Start</el-button>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="info" @click="optInstance('stop')">Stop</el-button>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="warning" @click="optInstance('restart')">Restart</el-button>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="danger" @click="optInstance('delete')">Delete</el-button>
+        </el-form-item>
+        <el-form-item>
+            <el-button type="warning" @click="optInstance('configure')">Configure prometheus.yml</el-button>
+        </el-form-item>
+    </el-form>
+
+    <h2>Notice</h2>
+    <el-card>
+        <div class="text item">页面每5秒自动刷新。</div>
+        <div class="text item">Page auto refresh every 5 seconds.</div>
+        <div class="text item">Grafana端口：80，默认用户名密码：admin/admin。Prometheus端口：9090。</div>
+        <div class="text item">Grafana port: 80, default user/password: admin/admin. Prometheus port: 9090.</div>
+        <div class="text item">目前是测试阶段，数据可能会被删除。</div>
+        <div class="text item">Now is in beta stage. Data may be deleted later!</div>
+    </el-card>
+
+    <h2>Usage</h2>
+    <el-card>
+        <div class="text item">登录Grafana -> 左侧栏Configuration -> Data Sources -> Add data source -> Prometheus -> URL填http://localhost:9090 -> Save & Test </div>
+    </el-card>
+
+
+</div>
+</body>
+
+<script src="https://cdn.bootcss.com/vue/2.6.10/vue.min.js"></script><!-- import Vue before Element -->
+<script src="https://cdn.bootcss.com/element-ui/2.9.2/index.js"></script>
+<script src="https://cdn.bootcss.com/axios/0.19.0-beta.1/axios.min.js"></script>
+<script>
+    new Vue({
+      el: '#app',
+      data: {
+          loading: false,
+          seletedInstance:'',
+          clusterData: null,
+          instanceData: null,
+          //clusterData: [{
+            //node: '测试节点',
+            //cpu: '50% / 4核',
+            //load: '0.08 / 0.03 / 0.01',
+            //disk: '5G / 40G / 12.5%',
+            //mem: '128M / 512M / 25%',
+            //swap: '1M / 100M / 1%'
+          //}],
+          //instanceData: [{
+            //name: '测试实例',
+            //state: 'RUNNING',
+            //ipv4: '240.156.0.167',
+            //type: '4核/256M',
+            //location: '测试节点'
+          //}],
+          formCreateInstance:{
+            name:'',
+            type:''
+          },
+          formManageInstance:{
+            name:''
+          }
+      },
+      mounted:function (){
+        this.updateStatus();
+        this.timer = setInterval(this.updateStatus, 5000);
+      },
+      methods: {
+        updateStatus: function () {
+          var that=this;
+          axios.get('/api/status')
+              .then(function (response) {
+                console.log(response);
+                that.clusterData=response["data"]["clusterData"];
+                that.instanceData=response["data"]["instanceData"];
+              })
+              .catch(function (error) {
+                console.log(error);
+              })
+        },
+        createInstance(){
+            this.loading=true;
+            var that=this;
+            axios.post('/api/createInstance',{
+                'name': that.formCreateInstance.name,
+                'saas': that.formCreateInstance.saas
+              })
+              .then(function (response) {
+                console.log(response);
+                if (response['data'] != "")
+                    alert(response['data']);
+                else
+                    alert("Create success!");
+                that.updateStatus;
+              })
+              .catch(function (error) {
+                console.log(error);
+              })
+              .finally(function(){
+                that.loading=false;
+              })
+        },
+        optInstance(opt) {
+          if(opt=="configure"){
+            window.open("/conf?name="+this.formManageInstance.name+"&ipv4="+this.formManageInstance.ipv4);
+            return;
+          }
+          this.loading=true;
+          var that=this;
+          axios.post('/api/optInstance',{
+                'name': that.formManageInstance.name,
+                'ipv4': that.formManageInstance.ipv4,
+                'opt': opt
+              })
+              .then(function (response) {
+                console.log(response);
+                if (response['data'] != "")
+                    alert(response['data']);
+                else
+                    alert("Success!");
+                that.updateStatus;
+              })
+              .catch(function (error) {
+                console.log(error);
+              })
+              .finally(function(){
+                that.loading=false;
+              })
+        },
+      }
+    })
+</script>
+</html>
